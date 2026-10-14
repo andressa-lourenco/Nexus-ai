@@ -109,4 +109,10 @@ AI Engineering | Quality Assurance | Test Automation
 
 ---
 
+
+## 📸 NEXUS AI — Application Preview
+
+![NEXUS AI Screenshot](./nexus-ai.png)
+
+**Live Demo:** https://nexus-ai-seven-flax.vercel.app/
 *This project is under active development. Features and provider compatibility should be verified against the current implementation.*
