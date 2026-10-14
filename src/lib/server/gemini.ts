@@ -26,15 +26,35 @@ async function geminiError(response: Response): Promise<ApiError> {
   }
   console.error("[nexus] gemini error", response.status, detail);
   if (response.status === 401 || response.status === 403) {
-    return new ApiError(502, "provider_auth", detail ? `The Gemini provider rejected the API key: ${detail}` : "The Gemini provider rejected the API key.");
+    return new ApiError(
+      502,
+      "provider_auth",
+      detail
+        ? `The Gemini provider rejected the API key: ${detail}`
+        : "The Gemini provider rejected the API key.",
+    );
   }
   if (response.status === 429) {
-    return new ApiError(503, "provider_rate_limited", "The Gemini provider rate limit was exceeded. Please retry shortly.");
+    return new ApiError(
+      503,
+      "provider_rate_limited",
+      "The Gemini provider rate limit was exceeded. Please retry shortly.",
+    );
   }
   if (response.status === 503) {
-    return new ApiError(503, "provider_unavailable", "The Gemini model is temporarily experiencing high demand. Please try again in a moment.");
+    return new ApiError(
+      503,
+      "provider_unavailable",
+      "The Gemini model is temporarily experiencing high demand. Please try again in a moment.",
+    );
   }
-  return new ApiError(502, "provider_error", detail ? `The Gemini provider returned an error: ${detail}` : "The Gemini provider returned an error. Please try again.");
+  return new ApiError(
+    502,
+    "provider_error",
+    detail
+      ? `The Gemini provider returned an error: ${detail}`
+      : "The Gemini provider returned an error. Please try again.",
+  );
 }
 
 const EMBEDDING_BATCH = 96;
@@ -48,7 +68,7 @@ export async function embedTextsGemini(texts: string[]): Promise<number[][]> {
 
   for (let i = 0; i < texts.length; i += EMBEDDING_BATCH) {
     const batch = texts.slice(i, i + EMBEDDING_BATCH);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:batchEmbedContents?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:batchEmbedContents`;
 
     const requests = batch.map((text) => ({
       model: `models/${cleanModel}`,
@@ -57,7 +77,10 @@ export async function embedTextsGemini(texts: string[]): Promise<number[][]> {
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       body: JSON.stringify({ requests }),
     });
 
@@ -65,7 +88,11 @@ export async function embedTextsGemini(texts: string[]): Promise<number[][]> {
     const json = (await response.json()) as { embeddings?: { values?: number[] }[] };
 
     if (!json.embeddings || json.embeddings.length === 0) {
-      throw new ApiError(502, "provider_error", "The Gemini embedding API returned an empty response.");
+      throw new ApiError(
+        502,
+        "provider_error",
+        "The Gemini embedding API returned an empty response.",
+      );
     }
 
     for (const item of json.embeddings) {
@@ -110,19 +137,24 @@ function formatGeminiContents(messages: Message[]) {
 }
 
 /** Streams chat completion using Gemini's native streamGenerateContent (SSE) */
-export async function streamChatGemini(messages: Message[], signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+export async function streamChatGemini(
+  messages: Message[],
+  signal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
   const apiKey = requireKey();
   const { chatModel } = getServerConfig();
   const primaryModel = chatModel.replace(/^models\//, "");
 
   // Candidate models in case of temporary 503 high-demand spike
-  const candidateModels = Array.from(new Set([
-    primaryModel,
-    "gemini-3.5-flash",
-    "gemini-3.8-flash",
-    "gemma-4-26b-a4b-it",
-    "gemini-flash-latest",
-  ]));
+  const candidateModels = Array.from(
+    new Set([
+      primaryModel,
+      "gemini-3.5-flash",
+      "gemini-3.8-flash",
+      "gemma-4-26b-a4b-it",
+      "gemini-flash-latest",
+    ]),
+  );
 
   const { contents, systemInstruction } = formatGeminiContents(messages);
   const payload: Record<string, unknown> = {
@@ -138,10 +170,13 @@ export async function streamChatGemini(messages: Message[], signal?: AbortSignal
 
   for (const model of candidateModels) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify(payload),
         signal,
       });
@@ -166,7 +201,14 @@ export async function streamChatGemini(messages: Message[], signal?: AbortSignal
   }
 
   if (!response || !response.body) {
-    throw lastError ?? new ApiError(503, "provider_unavailable", "All Gemini models are temporarily unavailable. Please retry in a moment.");
+    throw (
+      lastError ??
+      new ApiError(
+        503,
+        "provider_unavailable",
+        "All Gemini models are temporarily unavailable. Please retry in a moment.",
+      )
+    );
   }
 
   const reader = response.body.getReader();
